@@ -1,0 +1,12 @@
+
+server:
+  port: 8080
+
+spring:
+  security:
+    user:
+      name: admin
+      password: admin
+
+file:
+  directory : C:\\vault\\FILE_MANAGER_IMAGES
