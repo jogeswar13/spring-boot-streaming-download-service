@@ -6,9 +6,6 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import javax.servlet.http.HttpServletResponse;
@@ -33,15 +30,13 @@ public class DownloadController {
 	@Value("${file.directory:default}")
 	String fileDirectory;
 
-	/**
-	 * A constants for buffer size used to read/write data
-	 */
-	private static final int BUFFER_SIZE = 4096;
+	@Value("${file.zip-prefix:sample_}")
+	String zipPrefix;
 
 	@GetMapping(value = "/download", produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<StreamingResponseBody> download(final HttpServletResponse response) {
 
-		String fileName = "sample_" + System.currentTimeMillis() + ".zip";
+		String fileName = ZipArchives.newArchiveName(zipPrefix);
 		response.setContentType("application/zip");
 		response.setHeader("Content-Disposition", "attachment;filename=" + fileName);
 
@@ -73,23 +68,8 @@ public class DownloadController {
 	}
 
 	/**
-	 * Compresses files represented in an array of paths
-	 * 
-	 * @param files       a String array containing file paths
-	 * @param destZipFile The path of the destination zip file
-	 * @throws FileNotFoundException
-	 * @throws IOException
-	 */
-	public void zip(String[] files, String destZipFile) throws FileNotFoundException, IOException {
-		List<File> listFiles = new ArrayList<File>();
-		for (int i = 0; i < files.length; i++) {
-			listFiles.add(new File(files[i]));
-		}
-	}
-
-	/**
 	 * Adds a directory to the current zip output stream
-	 * 
+	 *
 	 * @param folder       the directory to be added
 	 * @param parentFolder the path of parent directory
 	 * @param zipOut       the current zip output stream
@@ -103,49 +83,36 @@ public class DownloadController {
 				zipDirectory(file, parentFolder + "/" + file.getName(), zipOut);
 				continue;
 			}
-			zipOut.putNextEntry(new ZipEntry(parentFolder + "/" + file.getName()));
-			BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-			byte[] bytesIn = new byte[BUFFER_SIZE];
-			int read = 0;
-			while ((read = bis.read(bytesIn)) != -1) {
-				zipOut.write(bytesIn, 0, read);
-			}
-			bis.close();
-			zipOut.closeEntry();
+			addFileEntry(file, parentFolder + "/" + file.getName(), zipOut);
 		}
 	}
 
 	/**
 	 * Adds a file to the current zip output stream
-	 * 
+	 *
 	 * @param file   the file to be added
 	 * @param zipOut the current zip output stream
 	 * @throws FileNotFoundException
 	 * @throws IOException
 	 */
 	private void zipFile(File file, ZipOutputStream zipOut) throws FileNotFoundException, IOException {
-		zipOut.putNextEntry(new ZipEntry(file.getName()));
-		BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-		byte[] bytesIn = new byte[BUFFER_SIZE];
-		int read = 0;
-		while ((read = bis.read(bytesIn)) != -1) {
-			zipOut.write(bytesIn, 0, read);
-		}
-		bis.close();
-		zipOut.closeEntry();
+		addFileEntry(file, file.getName(), zipOut);
 	}
 
-	@SuppressWarnings("unused")
-	private void zipSingleFile(File file, ZipOutputStream zipOut) throws IOException {
-		final InputStream inputStream = new FileInputStream(file);
-		final ZipEntry zipEntry = new ZipEntry(file.getName());
-		zipOut.putNextEntry(zipEntry);
-		byte[] bytes = new byte[1024];
-		int length;
-		while ((length = inputStream.read(bytes)) >= 0) {
-			zipOut.write(bytes, 0, length);
+	/**
+	 * Reads a file off disk into one entry of the archive being streamed.
+	 *
+	 * @param file      the file to be added
+	 * @param entryName the name the entry is stored under
+	 * @param zipOut    the current zip output stream
+	 * @throws FileNotFoundException
+	 * @throws IOException
+	 */
+	private void addFileEntry(File file, String entryName, ZipOutputStream zipOut)
+			throws FileNotFoundException, IOException {
+		try (final InputStream in = new BufferedInputStream(new FileInputStream(file))) {
+			ZipArchives.addEntry(zipOut, entryName, in);
 		}
-		inputStream.close();
 	}
 
 }

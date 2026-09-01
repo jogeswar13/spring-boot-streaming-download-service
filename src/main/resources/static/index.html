@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Streaming File Service</title>
+<style>
+	:root {
+		--bg: #f4f5f7;
+		--card: #ffffff;
+		--ink: #1f2933;
+		--muted: #6b7280;
+		--line: #d9dee5;
+		--accent: #2563eb;
+		--accent-soft: #eff4ff;
+		--ok: #15803d;
+		--err: #b91c1c;
+	}
+
+	* { box-sizing: border-box; }
+
+	body {
+		margin: 0;
+		padding: 24px 16px 48px;
+		background: var(--bg);
+		color: var(--ink);
+		font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+	}
+
+	.wrap { max-width: 720px; margin: 0 auto; }
+
+	h1 { font-size: 20px; margin: 0 0 4px; }
+
+	.sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+
+	.card {
+		background: var(--card);
+		border: 1px solid var(--line);
+		border-radius: 10px;
+		padding: 18px;
+		margin-bottom: 16px;
+	}
+
+	.creds { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+
+	.creds div { flex: 1 1 160px; }
+
+	.creds label {
+		display: block;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--muted);
+		margin-bottom: 4px;
+	}
+
+	.creds input {
+		width: 100%;
+		padding: 9px 10px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		font-size: 14px;
+		font-family: inherit;
+	}
+
+	.creds input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+	.modes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+
+	.modes label {
+		flex: 1 1 220px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 10px 12px;
+		cursor: pointer;
+		font-size: 13px;
+	}
+
+	.modes label.on { border-color: var(--accent); background: var(--accent-soft); }
+
+	.modes strong { display: block; font-size: 14px; }
+
+	.modes span { color: var(--muted); }
+
+	#drop {
+		border: 2px dashed var(--line);
+		border-radius: 10px;
+		padding: 32px 16px;
+		text-align: center;
+		color: var(--muted);
+		cursor: pointer;
+		transition: background .15s, border-color .15s;
+	}
+
+	#drop.hover { border-color: var(--accent); background: var(--accent-soft); }
+
+	#drop b { color: var(--accent); }
+
+	#picker { display: none; }
+
+	ul { list-style: none; margin: 16px 0 0; padding: 0; }
+
+	li {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 8px 0;
+		border-top: 1px solid var(--line);
+		font-size: 13px;
+	}
+
+	li .size { color: var(--muted); white-space: nowrap; }
+
+	.row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+
+	button {
+		flex: 1 1 160px;
+		padding: 11px 16px;
+		border-radius: 8px;
+		border: 1px solid var(--accent);
+		background: var(--accent);
+		color: #fff;
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	button.ghost { background: #fff; color: var(--ink); border-color: var(--line); }
+
+	button:disabled { opacity: .5; cursor: not-allowed; }
+
+	progress { width: 100%; height: 8px; margin-top: 16px; }
+
+	#log {
+		margin-top: 16px;
+		padding: 12px;
+		border-radius: 8px;
+		background: #0f172a;
+		color: #e2e8f0;
+		font: 12px/1.6 ui-monospace, Consolas, monospace;
+		white-space: pre-wrap;
+		word-break: break-word;
+		max-height: 260px;
+		overflow: auto;
+	}
+
+	#log:empty { display: none; }
+
+	.ok { color: #86efac; }
+
+	.err { color: #fca5a5; }
+
+	a.download { color: var(--accent); font-size: 13px; }
+
+	@media (max-width: 480px) {
+		body { padding: 16px 12px 40px; }
+		.card { padding: 14px; }
+		#drop { padding: 24px 12px; }
+		button { flex: 1 1 100%; }
+	}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+	<h1>Streaming file service</h1>
+	<p class="sub">Every upload is stored as a timestamped
+		<code>zip</code> — <code>sample_&lt;millis&gt;.zip</code> — holding the original files,
+		in the same directory <code>/api/download</code> serves from.</p>
+
+	<div class="card">
+
+		<div class="creds">
+			<div>
+				<label for="username">Username</label>
+				<input type="text" id="username" autocomplete="username" spellcheck="false" />
+			</div>
+			<div>
+				<label for="password">Password</label>
+				<input type="password" id="password" autocomplete="current-password" />
+			</div>
+		</div>
+
+		<div class="modes">
+			<label class="on"><input type="radio" name="mode" value="multipart" checked />
+				<strong>Multipart</strong><span>POST /api/upload — all files into one zip</span></label>
+			<label><input type="radio" name="mode" value="stream" />
+				<strong>Raw stream</strong><span>PUT /api/upload/stream — a zip per file, no buffering</span></label>
+		</div>
+
+		<div id="drop">
+			Drop files here or <b>browse</b>
+			<input type="file" id="picker" multiple />
+		</div>
+
+		<ul id="list"></ul>
+
+		<div class="row">
+			<button id="send" disabled>Upload</button>
+			<button id="clear" class="ghost" disabled>Clear</button>
+		</div>
+
+		<progress id="bar" value="0" max="100" hidden></progress>
+		<div id="log"></div>
+
+	</div>
+
+	<a class="download" href="/api/download">Download everything as a zip &rarr;</a>
+	<p class="sub" style="margin-top:6px">A plain link cannot carry the credentials above, so the
+		browser will ask for them once when you click it.</p>
+
+</div>
+
+<script>
+(function () {
+	'use strict';
+
+	var UPLOAD_MULTIPART = '/api/upload';
+	var UPLOAD_STREAM = '/api/upload/stream';
+
+	var REMEMBERED_USERNAME = 'streaming-service.username';
+
+	var usernameField = document.getElementById('username');
+	var passwordField = document.getElementById('password');
+	var dropZone = document.getElementById('drop');
+	var picker = document.getElementById('picker');
+	var fileList = document.getElementById('list');
+	var sendButton = document.getElementById('send');
+	var clearButton = document.getElementById('clear');
+	var progressBar = document.getElementById('bar');
+	var logBox = document.getElementById('log');
+
+	var selectedFiles = [];
+
+	function formatSize(bytes) {
+		var units = ['B', 'KB', 'MB', 'GB'];
+		var value = bytes;
+		var unit = 0;
+		while (value >= 1024 && unit < units.length - 1) {
+			value = value / 1024;
+			unit++;
+		}
+		return (unit === 0 ? value : value.toFixed(1)) + ' ' + units[unit];
+	}
+
+	function log(message, cssClass) {
+		var line = document.createElement('div');
+		if (cssClass) {
+			line.className = cssClass;
+		}
+		line.textContent = message;
+		logBox.appendChild(line);
+		logBox.scrollTop = logBox.scrollHeight;
+	}
+
+	function selectedMode() {
+		return document.querySelector('input[name="mode"]:checked').value;
+	}
+
+	function hasCredentials() {
+		return usernameField.value.length > 0 && passwordField.value.length > 0;
+	}
+
+	/**
+	 * Builds the HTTP Basic header. btoa() only accepts latin1, so the
+	 * credentials are encoded to UTF-8 bytes first — otherwise a non-ASCII
+	 * password throws instead of being sent.
+	 */
+	function basicAuthHeader() {
+		var credentials = usernameField.value + ':' + passwordField.value;
+		var utf8Bytes = unescape(encodeURIComponent(credentials));
+		return 'Basic ' + btoa(utf8Bytes);
+	}
+
+	function renderSelection() {
+		fileList.innerHTML = '';
+		selectedFiles.forEach(function (file) {
+			var row = document.createElement('li');
+			var name = document.createElement('span');
+			name.textContent = file.name;
+			var size = document.createElement('span');
+			size.className = 'size';
+			size.textContent = formatSize(file.size);
+			row.appendChild(name);
+			row.appendChild(size);
+			fileList.appendChild(row);
+		});
+		updateButtons();
+	}
+
+	function updateButtons() {
+		sendButton.disabled = selectedFiles.length === 0 || !hasCredentials();
+		clearButton.disabled = selectedFiles.length === 0;
+	}
+
+	function addFiles(files) {
+		Array.prototype.forEach.call(files, function (file) {
+			selectedFiles.push(file);
+		});
+		renderSelection();
+	}
+
+	/**
+	 * Wraps one XHR upload in a promise so the stream mode can run the files
+	 * sequentially while both modes share the same progress + logging.
+	 */
+	function send(method, url, body, label) {
+		return new Promise(function (resolve, reject) {
+			var request = new XMLHttpRequest();
+			request.open(method, url);
+			request.setRequestHeader('Authorization', basicAuthHeader());
+			// Tells the server this is the page talking, so it answers a bad
+			// login with a plain 401 instead of a browser credential popup.
+			request.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+			request.upload.onprogress = function (event) {
+				if (event.lengthComputable) {
+					progressBar.value = Math.round((event.loaded / event.total) * 100);
+				}
+			};
+
+			request.onload = function () {
+				if (request.status >= 200 && request.status < 300) {
+					log('✓ ' + label + ' — ' + request.responseText, 'ok');
+					resolve();
+				} else if (request.status === 401) {
+					log('✗ ' + label + ' — wrong username or password', 'err');
+					reject(new Error('unauthorized'));
+				} else {
+					log('✗ ' + label + ' — HTTP ' + request.status + ' ' + request.responseText, 'err');
+					reject(new Error('HTTP ' + request.status));
+				}
+			};
+
+			request.onerror = function () {
+				log('✗ ' + label + ' — network error', 'err');
+				reject(new Error('network error'));
+			};
+
+			request.send(body);
+		});
+	}
+
+	function uploadMultipart() {
+		var form = new FormData();
+		selectedFiles.forEach(function (file) {
+			form.append('files', file, file.name);
+		});
+		return send('POST', UPLOAD_MULTIPART, form, selectedFiles.length + ' file(s)');
+	}
+
+	function uploadStream() {
+		return selectedFiles.reduce(function (chain, file) {
+			return chain.then(function () {
+				progressBar.value = 0;
+				return send('PUT', UPLOAD_STREAM + '?name=' + encodeURIComponent(file.name), file, file.name);
+			});
+		}, Promise.resolve());
+	}
+
+	// The username is convenient to keep; the password deliberately is not stored.
+	usernameField.value = window.localStorage.getItem(REMEMBERED_USERNAME) || '';
+
+	usernameField.addEventListener('input', function () {
+		window.localStorage.setItem(REMEMBERED_USERNAME, usernameField.value);
+		updateButtons();
+	});
+
+	passwordField.addEventListener('input', updateButtons);
+
+	dropZone.addEventListener('click', function () {
+		picker.click();
+	});
+
+	picker.addEventListener('change', function () {
+		addFiles(picker.files);
+		picker.value = '';
+	});
+
+	['dragenter', 'dragover'].forEach(function (type) {
+		dropZone.addEventListener(type, function (event) {
+			event.preventDefault();
+			dropZone.classList.add('hover');
+		});
+	});
+
+	['dragleave', 'drop'].forEach(function (type) {
+		dropZone.addEventListener(type, function (event) {
+			event.preventDefault();
+			dropZone.classList.remove('hover');
+		});
+	});
+
+	dropZone.addEventListener('drop', function (event) {
+		addFiles(event.dataTransfer.files);
+	});
+
+	document.querySelectorAll('input[name="mode"]').forEach(function (radio) {
+		radio.addEventListener('change', function () {
+			document.querySelectorAll('.modes label').forEach(function (label) {
+				label.classList.toggle('on', label.contains(radio) && radio.checked);
+			});
+		});
+	});
+
+	clearButton.addEventListener('click', function () {
+		selectedFiles = [];
+		logBox.innerHTML = '';
+		progressBar.hidden = true;
+		renderSelection();
+	});
+
+	sendButton.addEventListener('click', function () {
+		sendButton.disabled = true;
+		clearButton.disabled = true;
+		progressBar.hidden = false;
+		progressBar.value = 0;
+
+		var upload = selectedMode() === 'stream' ? uploadStream() : uploadMultipart();
+
+		upload.catch(function () {
+			// every failure is already logged by send()
+		}).then(updateButtons);
+	});
+
+	updateButtons();
+}());
+</script>
+</body>
+</html>

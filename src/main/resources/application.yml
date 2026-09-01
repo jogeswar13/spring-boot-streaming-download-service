@@ -7,6 +7,16 @@ spring:
     user:
       name: admin
       password: admin
+  servlet:
+    multipart:
+      enabled: true
+      # Large uploads are expected; keep them off the heap by spilling to disk early.
+      file-size-threshold: 2MB
+      max-file-size: 2GB
+      max-request-size: 2GB
 
 file:
   directory : C:\\vault\\FILE_MANAGER_IMAGES
+  # Name prefix for the archives produced by both download and upload,
+  # e.g. sample_1788287531099.zip
+  zip-prefix: sample_
